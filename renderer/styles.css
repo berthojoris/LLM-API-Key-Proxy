@@ -344,3 +344,145 @@ html, body {
   background: #fde7e9;
   color: var(--danger-color);
 }
+
+.oauth-providers-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oauth-provider-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.oauth-provider-header {
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-secondary);
+}
+
+.oauth-provider-info {
+  flex: 1;
+}
+
+.oauth-provider-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.oauth-provider-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.oauth-provider-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.oauth-provider-body {
+  padding: 12px 14px;
+}
+
+.oauth-credentials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oauth-credential-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+.oauth-credential-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.oauth-credential-email {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.oauth-credential-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+  align-self: flex-start;
+}
+
+.oauth-credential-status.active {
+  background: #dff6dd;
+  color: var(--success-color);
+}
+
+.oauth-credential-status.expired {
+  background: #fff4ce;
+  color: var(--warning-color);
+}
+
+.oauth-credential-expiry {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.oauth-credential-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.loading-spinner {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+}
+
+.error-message {
+  text-align: center;
+  padding: 20px;
+  color: var(--danger-color);
+  background: #fde7e9;
+  border-radius: 4px;
+}
+
+.no-credentials {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.spinner-small {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
+const fs = require('fs').promises
 const Store = require('electron-store')
 
 const store = new Store()
@@ -8,6 +9,34 @@ const store = new Store()
 let mainWindow = null
 let proxyProcess = null
 let tray = null
+let oauthProcess = null
+
+const OAUTH_PROVIDERS = {
+  gemini_cli: {
+    name: 'Gemini CLI',
+    description: 'Google OAuth2 - Cloud platform, caching, tool handling',
+    callbackPort: 51120
+  },
+  antigravity: {
+    name: 'Antigravity',
+    description: 'Google OAuth2 - Cloud platform, cclog, experiments, Claude access',
+    callbackPort: 51121
+  },
+  qwen_code: {
+    name: 'Qwen Code',
+    description: 'Qwen OAuth2 - openid, profile, email, model.completion',
+    callbackPort: 11451
+  },
+  iflow: {
+    name: 'iFlow',
+    description: 'Custom OAuth2 - API key + OAuth support',
+    callbackPort: 11451
+  }
+}
+
+function getOAuthCommand(providerId, port) {
+  return `python -m rotator_library.credential_tool --oauth ${providerId} --port ${port}`
+}
 
 try {
   require('electron-reloader')(module, {
@@ -174,6 +203,188 @@ function getProxyStatus() {
   return { status: 'stopped' }
 }
 
+async function getOAuthCredentials() {
+  const workingDir = store.get('workingDir', '.')
+  const oauthCredsPath = path.join(workingDir, 'oauth_creds')
+  const credentials = {}
+
+  for (const provider of Object.keys(OAUTH_PROVIDERS)) {
+    credentials[provider] = []
+  }
+
+  try {
+    await fs.access(oauthCredsPath)
+    const files = await fs.readdir(oauthCredsPath)
+
+    for (const provider of Object.keys(OAUTH_PROVIDERS)) {
+      const providerFiles = files.filter(f => f.startsWith(`${provider}_oauth_`) && f.endsWith('.json'))
+
+      for (const file of providerFiles) {
+        try {
+          const filePath = path.join(oauthCredsPath, file)
+          const data = await fs.readFile(filePath, 'utf-8')
+          const credential = JSON.parse(data)
+
+          const numMatch = file.match(/oauth_(\d+)\.json$/)
+          const credentialNum = numMatch ? parseInt(numMatch[1]) : 1
+
+          const metadata = credential._proxy_metadata || {}
+          const email = metadata.email || credential.email || 'Unknown'
+          const expiryDate = credential.expiry_date || credential.expiry
+
+          credentials[provider].push({
+            id: file,
+            number: credentialNum,
+            email: email,
+            status: expiryDate && Date.now() / 1000 < expiryDate ? 'Active' : 'Expired',
+            expiryDate: expiryDate ? new Date(expiryDate * 1000).toLocaleString() : 'N/A'
+          })
+        } catch (err) {
+          console.error(`Error reading credential file ${file}:`, err)
+        }
+      }
+
+      credentials[provider].sort((a, b) => a.number - b.number)
+    }
+  } catch (err) {
+    console.log('oauth_creds directory does not exist yet')
+  }
+
+  return credentials
+}
+
+async function startOAuthAuthentication(providerId, customPort) {
+  const provider = OAUTH_PROVIDERS[providerId]
+  if (!provider) {
+    return { success: false, error: 'Unknown provider' }
+  }
+
+  const workingDir = store.get('workingDir', '.')
+  const pythonPath = store.get('pythonPath', 'python')
+  const port = customPort || provider.callbackPort
+
+  try {
+    const command = provider.authCommand(port)
+
+    oauthProcess = spawn(pythonPath, ['-m', 'rotator_library.credential_tool', '--oauth', providerId, '--port', port.toString()], {
+      cwd: workingDir,
+      shell: true,
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    })
+
+    let authUrl = null
+    let completed = false
+
+    oauthProcess.stdout.on('data', (data) => {
+      const output = data.toString()
+      console.log('OAuth stdout:', output)
+
+      const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
+      if (urlMatch && !authUrl) {
+        authUrl = urlMatch[0]
+        shell.openExternal(authUrl)
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('oauth-status', {
+            type: 'browser_opened',
+            provider: providerId,
+            url: authUrl
+          })
+        }
+      }
+
+      if (output.toLowerCase().includes('success') || output.toLowerCase().includes('authenticated')) {
+        completed = true
+      }
+    })
+
+    oauthProcess.stderr.on('data', (data) => {
+      const output = data.toString()
+      console.log('OAuth stderr:', output)
+
+      const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
+      if (urlMatch && !authUrl) {
+        authUrl = urlMatch[0]
+        shell.openExternal(authUrl)
+      }
+
+      if (output.toLowerCase().includes('success') || output.toLowerCase().includes('authenticated')) {
+        completed = true
+      }
+    })
+
+    return new Promise((resolve) => {
+      oauthProcess.on('close', (code) => {
+        oauthProcess = null
+
+        if (completed || code === 0) {
+          getOAuthCredentials().then(creds => {
+            resolve({ success: true, credentials: creds })
+          })
+        } else {
+          resolve({ success: false, error: `Authentication failed with code ${code}` })
+        }
+      })
+
+      oauthProcess.on('error', (error) => {
+        oauthProcess = null
+        resolve({ success: false, error: error.message })
+      })
+    })
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+async function exportOAuthToEnv(providerId, credentialId) {
+  const workingDir = store.get('workingDir', '.')
+  const oauthCredsPath = path.join(workingDir, 'oauth_creds')
+  const filePath = path.join(oauthCredsPath, credentialId)
+
+  try {
+    const data = await fs.readFile(filePath, 'utf-8')
+    const credential = JSON.parse(data)
+
+    const provider = OAUTH_PROVIDERS[providerId]
+    const prefix = providerId.toUpperCase()
+    const numMatch = credentialId.match(/oauth_(\d+)\.json$/)
+    const num = numMatch ? numMatch[1] : '1'
+
+    const envContent = `# ${provider.name} Credential #${num}
+# Exported from: ${credentialId}
+# Generated at: ${new Date().toISOString()}
+
+${prefix}_${num}_ACCESS_TOKEN=${credential.access_token || ''}
+${prefix}_${num}_REFRESH_TOKEN=${credential.refresh_token || ''}
+${prefix}_${num}_CLIENT_ID=${credential.client_id || ''}
+${prefix}_${num}_CLIENT_SECRET=${credential.client_secret || ''}
+${prefix}_${num}_TOKEN_URI=${credential.token_uri || 'https://oauth2.googleapis.com/token'}
+${prefix}_${num}_SCOPE=${credential.scope || ''}
+${prefix}_${num}_TOKEN_TYPE=${credential.token_type || 'Bearer'}
+${prefix}_${num}_ID_TOKEN=${credential.id_token || ''}
+${prefix}_${num}_EXPIRY_DATE=${credential.expiry_date || credential.expiry || 0}
+${prefix}_${num}_EMAIL=${credential._proxy_metadata?.email || credential.email || ''}
+${prefix}_${num}_UNIVERSE_DOMAIN=${credential.universe_domain || 'googleapis.com'}
+`
+
+    return { success: true, content: envContent }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
+async function deleteOAuthCredential(providerId, credentialId) {
+  const workingDir = store.get('workingDir', '.')
+  const oauthCredsPath = path.join(workingDir, 'oauth_creds')
+  const filePath = path.join(oauthCredsPath, credentialId)
+
+  try {
+    await fs.unlink(filePath)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('start-proxy', async () => {
     startProxy()
@@ -211,6 +422,26 @@ app.whenReady().then(() => {
       proxyScript: store.get('proxyScript', 'main.py'),
       workingDir: store.get('workingDir', '.')
     }
+  })
+
+  ipcMain.handle('get-oauth-providers', async () => {
+    return OAUTH_PROVIDERS
+  })
+
+  ipcMain.handle('get-oauth-credentials', async () => {
+    return await getOAuthCredentials()
+  })
+
+  ipcMain.handle('start-oauth-auth', async (event, providerId, customPort) => {
+    return await startOAuthAuthentication(providerId, customPort)
+  })
+
+  ipcMain.handle('export-oauth-env', async (event, providerId, credentialId) => {
+    return await exportOAuthToEnv(providerId, credentialId)
+  })
+
+  ipcMain.handle('delete-oauth-credential', async (event, providerId, credentialId) => {
+    return await deleteOAuthCredential(providerId, credentialId)
   })
 
   createWindow()
