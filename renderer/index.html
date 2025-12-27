@@ -41,15 +41,39 @@
         <div class="panel-body">
           <div class="form-group">
             <label for="python-path">Python Path</label>
-            <input type="text" id="python-path" class="form-input" placeholder="python">
+            <div class="input-with-button">
+              <input type="text" id="python-path" class="form-input" placeholder="python">
+              <button id="browse-python-btn" class="btn btn-secondary btn-small" title="Browse for Python">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                </svg>
+                Browse
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label for="proxy-script">Proxy Script</label>
-            <input type="text" id="proxy-script" class="form-input" placeholder="main.py">
+            <div class="input-with-button">
+              <input type="text" id="proxy-script" class="form-input" placeholder="main.py">
+              <button id="browse-proxy-script-btn" class="btn btn-secondary btn-small" title="Browse for Script">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                </svg>
+                Browse
+              </button>
+            </div>
           </div>
           <div class="form-group">
             <label for="working-dir">Working Directory</label>
-            <input type="text" id="working-dir" class="form-input" placeholder=".">
+            <div class="input-with-button">
+              <input type="text" id="working-dir" class="form-input" placeholder=".">
+              <button id="browse-working-dir-btn" class="btn btn-secondary btn-small" title="Browse for Directory">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                </svg>
+                Browse
+              </button>
+            </div>
           </div>
           <button id="save-settings-btn" class="btn btn-secondary">Save Settings</button>
         </div>

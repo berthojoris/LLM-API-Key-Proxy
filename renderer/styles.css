@@ -249,6 +249,29 @@ html, body {
   border-color: var(--primary-color);
 }
 
+.input-with-button {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.input-with-button .form-input {
+  flex: 1;
+}
+
+.btn-icon {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 32px;
+}
+
+.btn-icon svg {
+  flex-shrink: 0;
+}
+
 .logs-container {
   background: #1e1e1e;
   color: #d4d4d4;

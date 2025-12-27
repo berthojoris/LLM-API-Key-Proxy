@@ -27,5 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const subscription = (_event, data) => callback(data)
     ipcRenderer.on('oauth-status', subscription)
     return () => ipcRenderer.removeListener('oauth-status', subscription)
-  }
+  },
+  openPathInExplorer: (filePath) => ipcRenderer.invoke('open-path-in-explorer', filePath),
+  browseForFile: (options) => ipcRenderer.invoke('browse-for-file', options),
+  browseForDirectory: (options) => ipcRenderer.invoke('browse-for-directory', options)
 })

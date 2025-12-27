@@ -100,6 +100,59 @@ saveSettingsBtn.addEventListener('click', async () => {
   }
 })
 
+document.getElementById('browse-python-btn').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.browseForFile({
+      title: 'Select Python Executable',
+      filters: [
+        { name: 'Python Executables', extensions: ['exe'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    
+    if (result.success && result.filePath) {
+      pythonPathInput.value = result.filePath
+      addLog('info', `Selected Python: ${result.filePath}`)
+    }
+  } catch (error) {
+    addLog('error', `Failed to browse for file: ${error.message}`)
+  }
+})
+
+document.getElementById('browse-working-dir-btn').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.browseForDirectory({
+      title: 'Select Working Directory'
+    })
+    
+    if (result.success && result.filePath) {
+      workingDirInput.value = result.filePath
+      addLog('info', `Selected Working Directory: ${result.filePath}`)
+    }
+  } catch (error) {
+    addLog('error', `Failed to browse for directory: ${error.message}`)
+  }
+})
+
+document.getElementById('browse-proxy-script-btn').addEventListener('click', async () => {
+  try {
+    const result = await window.electronAPI.browseForFile({
+      title: 'Select Proxy Script',
+      filters: [
+        { name: 'Python Scripts', extensions: ['py'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    
+    if (result.success && result.filePath) {
+      proxyScriptInput.value = result.filePath
+      addLog('info', `Selected Proxy Script: ${result.filePath}`)
+    }
+  } catch (error) {
+    addLog('error', `Failed to browse for file: ${error.message}`)
+  }
+})
+
 saveConfigBtn.addEventListener('click', async () => {
   try {
     const config = {

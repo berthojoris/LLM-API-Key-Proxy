@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const fs = require('fs').promises
@@ -442,6 +442,79 @@ app.whenReady().then(() => {
 
   ipcMain.handle('delete-oauth-credential', async (event, providerId, credentialId) => {
     return await deleteOAuthCredential(providerId, credentialId)
+  })
+
+  ipcMain.handle('open-path-in-explorer', async (event, filePath) => {
+    try {
+      if (!filePath) {
+        return { success: false, error: 'No path provided' }
+      }
+
+      let pathToOpen = filePath
+
+      if (process.platform === 'win32') {
+        if (pathToOpen.includes('.exe') || pathToOpen.includes('python') || pathToOpen.includes('python3')) {
+          pathToOpen = path.dirname(pathToOpen)
+        }
+        const { exec } = require('child_process')
+        await new Promise((resolve, reject) => {
+          exec(`explorer "${pathToOpen}"`, (error) => {
+            if (error) reject(error)
+            else resolve()
+          })
+        })
+      } else {
+        shell.openPath(pathToOpen)
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('browse-for-file', async (event, options = {}) => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: options.title || 'Select Python Executable',
+        defaultPath: options.defaultPath || app.getPath('home'),
+        buttonLabel: 'Select',
+        filters: options.filters || [
+          { name: 'Python Executables', extensions: ['exe'] },
+          { name: 'All Files', extensions: ['*'] }
+        ],
+        properties: ['openFile'],
+        ...options
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+
+      return { success: true, canceled: false, filePath: result.filePaths[0] }
+    } catch (error) {
+      return { success: false, canceled: false, error: error.message }
+    }
+  })
+
+  ipcMain.handle('browse-for-directory', async (event, options = {}) => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: options.title || 'Select Directory',
+        defaultPath: options.defaultPath || app.getPath('home'),
+        buttonLabel: 'Select',
+        properties: ['openDirectory', 'createDirectory'],
+        ...options
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true }
+      }
+
+      return { success: true, canceled: false, filePath: result.filePaths[0] }
+    } catch (error) {
+      return { success: false, canceled: false, error: error.message }
+    }
   })
 
   createWindow()
