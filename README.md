@@ -113,22 +113,52 @@ View credential status in the **Credential Management** panel.
 
 The application supports OAuth 2.0 authentication for the following providers:
 
-| Provider | Description |
-|----------|-------------|
-| **Gemini CLI** | Google OAuth2 authentication for Gemini models |
-| **Qwen Code** | Alibaba Qwen Code OAuth authentication |
-| **iFlow** | iFlow provider OAuth authentication |
-| **Antigravity** | Google internal API authentication (Gemini 3 + Claude Opus 4.5) |
+| Provider | OAuth Type | Description |
+|----------|------------|-------------|
+| **Gemini CLI** | Browser Flow | Google OAuth2 authentication for Gemini models |
+| **Qwen Code** | Device Flow | Alibaba Qwen Code OAuth authentication using device code |
+| **iFlow** | Browser Flow | iFlow provider OAuth authentication |
+| **Antigravity** | Browser Flow | Google internal API authentication (Gemini 3 + Claude Opus 4.5) |
 
 #### Authenticating with OAuth
 
+The application supports two types of OAuth 2.0 flows:
+
+##### Browser-Based OAuth Flow (Gemini CLI, iFlow, Antigravity)
+
+Browser-based providers automatically open a browser window for authentication:
+
 1. Navigate to the **OAuth Authentication** panel
-2. Select a provider from the dropdown (e.g., Qwen Code)
+2. Select a provider from the dropdown (e.g., Gemini CLI, iFlow, or Antigravity)
 3. Configure the callback port (default: 8888)
 4. Click the **Authenticate** button
-5. A browser window will open for OAuth login
-6. Complete the authentication flow
-7. Credentials will be automatically saved
+5. A browser window will automatically open for OAuth login
+6. Sign in and grant permissions to the application
+7. The local callback server captures the authorization code
+8. Credentials will be automatically saved
+
+##### Device Flow Authentication (Qwen Code)
+
+Qwen uses OAuth Device Flow, which requires manual code entry instead of automatic browser redirection:
+
+1. Navigate to the **OAuth Authentication** panel
+2. Select **Qwen Code** from the provider dropdown
+3. Configure the callback port (default: 8888)
+4. Click the **Authenticate** button
+5. The application will display:
+   - A **User Code** (e.g., `ABCD-1234`)
+   - A **Verification URL** (e.g., `https://chat.qwen.ai/device`)
+6. Manually open the verification URL in your browser
+7. Enter the user code when prompted
+8. Sign in to your Qwen account
+9. The application will automatically detect when authentication completes
+10. Credentials will be automatically saved
+
+**Important Notes for Device Flow:**
+- The user code is valid for a limited time (typically 10-15 minutes)
+- You must enter the code on a device with internet access
+- The application will continue polling until you complete authentication
+- If the code expires, click **Authenticate** again to generate a new code
 
 #### OAuth Callback Port Configuration
 
@@ -136,6 +166,8 @@ The callback port is used by the local OAuth server to receive authentication ca
 - **Default Port**: 8888
 - **Port Range**: 1024-65535
 - **Note**: Ensure the port is not in use by another application
+- **Browser Flow**: Required for capturing authorization code
+- **Device Flow**: Used for polling the token endpoint (Qwen)
 
 #### Stateless Deployment (Export to Environment Variables)
 
@@ -149,7 +181,7 @@ For stateless deployments (e.g., cloud platforms), OAuth credentials can be expo
 3. Copy the exported environment variables to your platform's configuration
 4. Each credential uses a numbered format (e.g., `QWEN_CODE_1_ACCESS_TOKEN`)
 
-**Note**: OAuth credentials without refresh tokens cannot be automatically renewed and will expire (typically 1 hour for Google OAuth, longer for other providers).
+**Note**: OAuth credentials without refresh tokens cannot be automatically renewed and will expire (typically 1 hour for Google OAuth, longer for other providers). Device Flow providers like Qwen include refresh tokens for automatic renewal.
 
 ## Configuration
 
@@ -289,6 +321,8 @@ ipcMain.handle('get-proxy-status', async () => { /* ... */ })
 
 ### OAuth Authentication Fails
 
+#### Browser Flow Issues (Gemini CLI, iFlow, Antigravity)
+
 1. **Callback Port**: Ensure the configured port is not in use by another application
 2. **Browser Popup**: Allow the application to open browser windows for OAuth login
 3. **PYTHONPATH**: Ensure the Working Directory is set correctly (see above)
@@ -296,6 +330,15 @@ ipcMain.handle('get-proxy-status', async () => { /* ... */ })
    - `httpx` - For OAuth HTTP requests
    - `google-auth-oauthlib` - For Google OAuth providers
    - Check `requirements.txt` for complete dependency list
+
+#### Device Flow Issues (Qwen Code)
+
+1. **User Code Expired**: If the user code expires, click **Authenticate** again to generate a new code
+2. **Incorrect Code**: Ensure you enter the code exactly as displayed (case-sensitive, includes hyphen)
+3. **Verification URL**: Make sure you visit the correct URL (typically `https://chat.qwen.ai/device`)
+4. **Network Connection**: Ensure your device has internet access to reach the verification URL
+5. **Account Limit**: Qwen may limit the number of active sessions per account
+6. **Polling Timeout**: The application will continue polling until you complete authentication; if interrupted, restart the process
 
 ### Application Won't Launch
 

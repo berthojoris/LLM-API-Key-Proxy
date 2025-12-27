@@ -17,6 +17,8 @@ Credentials are stored in plain text without encryption, making them vulnerable 
 **Impact:**  
 If an attacker gains system access, all API credentials can be easily extracted and misused.
 
+**Status:** PENDING
+
 ---
 
 ### 2. IPC (Inter-Process Communication) Security
@@ -28,6 +30,8 @@ Although context isolation is enabled, the renderer process may still send malic
 
 **Impact:**  
 Potential unauthorized system command execution or file access.
+
+**Status:** PENDING
 
 ---
 
@@ -41,6 +45,8 @@ Users may configure malicious Python scripts or executable paths.
 **Impact:**  
 Arbitrary code execution leading to potential system compromise.
 
+**Status:** PENDING
+
 ---
 
 ### 4. Shell Command Execution
@@ -52,6 +58,8 @@ This introduces command injection vulnerabilities if inputs are not strictly san
 
 **Impact:**  
 Attackers may execute arbitrary shell commands on the system.
+
+**Status:** PENDING
 
 ---
 
@@ -65,6 +73,8 @@ If the application is compromised, it could be leveraged to access sensitive sys
 **Impact:**  
 Unauthorized access to critical system files and personal data.
 
+**Status:** PENDING
+
 ---
 
 ### 6. OAuth Security
@@ -76,6 +86,8 @@ Tokens are not encrypted and can be easily extracted.
 
 **Impact:**  
 Compromise of OAuth accounts and connected third-party services.
+
+**Status:** PENDING
 
 ---
 
@@ -102,30 +114,37 @@ Compromise of OAuth accounts and connected third-party services.
 ### Encrypt Sensitive Data
 - Encrypt all stored credentials.
 - Use OS-level secure storage such as **Windows Data Protection API (DPAPI)**.
+**Status:** PENDING
 
 ### Input Validation
 - Add strict validation for all user-provided paths and commands.
 - Sanitize all inputs before process execution.
+**Status:** PENDING
 
 ### Secure IPC Communication
 - Implement strict schema validation for IPC messages.
 - Use synchronous IPC calls with proper error handling where applicable.
+**Status:** PENDING
 
 ### Remove `shell: true`
 - Replace `shell: true` with direct process execution.
 - Validate and sanitize all command arguments before execution.
+**Status:** PENDING
 
 ### Sandbox the Application
 - Enable Electron sandbox mode where possible.
 - Introduce additional security boundaries between main and renderer processes.
+**Status:** PENDING
 
 ### Implement Access Controls
 - Restrict file system access to only required directories.
 - Require authentication or confirmation for sensitive operations.
+**Status:** PENDING
 
 ### Secure Credential Handling
 - Use **Windows Credential Manager** or equivalent secure storage.
 - Implement OAuth token rotation and secure refresh mechanisms.
+**Status:** PENDING
 
 ---
 
