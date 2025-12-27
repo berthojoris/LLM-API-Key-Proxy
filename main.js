@@ -133,11 +133,12 @@ function startProxy() {
   const pythonPath = store.get('pythonPath', 'python')
   const proxyScript = store.get('proxyScript', 'main.py')
   const workingDir = store.get('workingDir', '.')
+  const srcDir = path.join(workingDir, 'src')
 
   const env = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
-    PYTHONPATH: process.env.PYTHONPATH ? `${workingDir}${path.delimiter}${process.env.PYTHONPATH}` : workingDir
+    PYTHONPATH: process.env.PYTHONPATH ? `${srcDir}${path.delimiter}${process.env.PYTHONPATH}` : srcDir
   }
 
   proxyProcess = spawn(pythonPath, [proxyScript], {
@@ -264,12 +265,21 @@ async function startOAuthAuthentication(providerId, customPort) {
   const workingDir = store.get('workingDir', '.')
   const pythonPath = store.get('pythonPath', 'python')
   const port = customPort || provider.callbackPort
+  const srcDir = path.join(workingDir, 'src')
+
+  console.log('OAuth Auth Debug:')
+  console.log('  Working Dir:', workingDir)
+  console.log('  Src Dir:', srcDir)
+  console.log('  Python Path:', pythonPath)
+  console.log('  Existing PYTHONPATH:', process.env.PYTHONPATH)
 
   const env = {
     ...process.env,
     PYTHONUNBUFFERED: '1',
-    PYTHONPATH: process.env.PYTHONPATH ? `${workingDir}${path.delimiter}${process.env.PYTHONPATH}` : workingDir
+    PYTHONPATH: process.env.PYTHONPATH ? `${srcDir}${path.delimiter}${process.env.PYTHONPATH}` : srcDir
   }
+
+  console.log('  Final PYTHONPATH:', env.PYTHONPATH)
 
   try {
     oauthProcess = spawn(pythonPath, ['-m', 'rotator_library.credential_tool', '--oauth', providerId, '--port', port.toString()], {

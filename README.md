@@ -278,11 +278,13 @@ ipcMain.handle('get-proxy-status', async () => { /* ... */ })
    ```
 4. **PYTHONPATH Issue**: If you see "ModuleNotFoundError: No module named 'rotator_library'", ensure:
    - The Working Directory is set to the root directory of the LLM-API-Key-Proxy repository
-   - The `src/` folder exists in the working directory
-   - The `rotator_library` package is installed in editable mode:
+   - The `src/` folder exists in the working directory (e.g., `C:\DEKSTOP\LLM-API-Key-Proxy\src`)
+   - Install Python dependencies from the repository root:
      ```bash
-     pip install -e src/rotator_library
+     cd C:\DEKSTOP\LLM-API-Key-Proxy
+     pip install -r requirements.txt
      ```
+   - Note: Python 3.13 editable installs have known issues; the Electron app automatically configures PYTHONPATH to point to the `src/` directory
 5. **View Logs**: Check the Proxy Logs panel for error messages
 
 ### OAuth Authentication Fails
