@@ -9,6 +9,13 @@ let mainWindow = null
 let proxyProcess = null
 let tray = null
 
+try {
+  require('electron-reloader')(module, {
+    debug: true,
+    watchRenderer: true
+  })
+} catch (_) {}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1000,

@@ -19,14 +19,14 @@
   --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-body {
+html, body {
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  overflow: hidden;
   margin: 0;
   padding: 0;
-  height: 100vh;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-container {
@@ -131,6 +131,7 @@ body {
   display: flex;
   gap: 12px;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .btn {
@@ -195,6 +196,7 @@ body {
   border-radius: 4px;
   box-shadow: var(--shadow);
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .panel-header {
@@ -203,6 +205,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .panel-header h2 {
@@ -300,7 +303,7 @@ body {
 .info-text {
   font-size: 13px;
   color: var(--text-secondary);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   line-height: 1.5;
 }
 
