@@ -34,10 +34,6 @@ const OAUTH_PROVIDERS = {
   }
 }
 
-function getOAuthCommand(providerId, port) {
-  return `python -m rotator_library.credential_tool --oauth ${providerId} --port ${port}`
-}
-
 try {
   require('electron-reloader')(module, {
     debug: true,
@@ -138,10 +134,16 @@ function startProxy() {
   const proxyScript = store.get('proxyScript', 'main.py')
   const workingDir = store.get('workingDir', '.')
 
+  const env = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    PYTHONPATH: process.env.PYTHONPATH ? `${workingDir}${path.delimiter}${process.env.PYTHONPATH}` : workingDir
+  }
+
   proxyProcess = spawn(pythonPath, [proxyScript], {
     cwd: workingDir,
     shell: true,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    env
   })
 
   proxyProcess.stdout.on('data', (data) => {
@@ -263,17 +265,22 @@ async function startOAuthAuthentication(providerId, customPort) {
   const pythonPath = store.get('pythonPath', 'python')
   const port = customPort || provider.callbackPort
 
-  try {
-    const command = provider.authCommand(port)
+  const env = {
+    ...process.env,
+    PYTHONUNBUFFERED: '1',
+    PYTHONPATH: process.env.PYTHONPATH ? `${workingDir}${path.delimiter}${process.env.PYTHONPATH}` : workingDir
+  }
 
+  try {
     oauthProcess = spawn(pythonPath, ['-m', 'rotator_library.credential_tool', '--oauth', providerId, '--port', port.toString()], {
       cwd: workingDir,
       shell: true,
-      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+      env
     })
 
     let authUrl = null
     let completed = false
+    let stderrOutput = ''
 
     oauthProcess.stdout.on('data', (data) => {
       const output = data.toString()
@@ -299,6 +306,7 @@ async function startOAuthAuthentication(providerId, customPort) {
 
     oauthProcess.stderr.on('data', (data) => {
       const output = data.toString()
+      stderrOutput += output
       console.log('OAuth stderr:', output)
 
       const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
@@ -321,7 +329,8 @@ async function startOAuthAuthentication(providerId, customPort) {
             resolve({ success: true, credentials: creds })
           })
         } else {
-          resolve({ success: false, error: `Authentication failed with code ${code}` })
+          const errorMsg = stderrOutput.trim() || `Authentication failed with code ${code}`
+          resolve({ success: false, error: errorMsg })
         }
       })
 

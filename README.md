@@ -109,6 +109,48 @@ Supported providers:
 
 View credential status in the **Credential Management** panel.
 
+### OAuth Authentication
+
+The application supports OAuth 2.0 authentication for the following providers:
+
+| Provider | Description |
+|----------|-------------|
+| **Gemini CLI** | Google OAuth2 authentication for Gemini models |
+| **Qwen Code** | Alibaba Qwen Code OAuth authentication |
+| **iFlow** | iFlow provider OAuth authentication |
+| **Antigravity** | Google internal API authentication (Gemini 3 + Claude Opus 4.5) |
+
+#### Authenticating with OAuth
+
+1. Navigate to the **OAuth Authentication** panel
+2. Select a provider from the dropdown (e.g., Qwen Code)
+3. Configure the callback port (default: 8888)
+4. Click the **Authenticate** button
+5. A browser window will open for OAuth login
+6. Complete the authentication flow
+7. Credentials will be automatically saved
+
+#### OAuth Callback Port Configuration
+
+The callback port is used by the local OAuth server to receive authentication callbacks:
+- **Default Port**: 8888
+- **Port Range**: 1024-65535
+- **Note**: Ensure the port is not in use by another application
+
+#### Stateless Deployment (Export to Environment Variables)
+
+For stateless deployments (e.g., cloud platforms), OAuth credentials can be exported as environment variables:
+
+1. After successful authentication, credentials are saved to standard locations
+2. Use the credential tool to export credentials:
+   ```bash
+   python -m rotator_library.credential_tool --export-oauth
+   ```
+3. Copy the exported environment variables to your platform's configuration
+4. Each credential uses a numbered format (e.g., `QWEN_CODE_1_ACCESS_TOKEN`)
+
+**Note**: OAuth credentials without refresh tokens cannot be automatically renewed and will expire (typically 1 hour for Google OAuth, longer for other providers).
+
 ## Configuration
 
 ### Application Settings
@@ -230,8 +272,28 @@ ipcMain.handle('get-proxy-status', async () => { /* ... */ })
 
 1. **Check Python Path**: Ensure the Python path is correct and accessible
 2. **Verify Script Location**: Make sure `main.py` exists in the specified working directory
-3. **Check Dependencies**: Ensure all Python dependencies are installed
-4. **View Logs**: Check the Proxy Logs panel for error messages
+3. **Check Dependencies**: Ensure all Python dependencies are installed:
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. **PYTHONPATH Issue**: If you see "ModuleNotFoundError: No module named 'rotator_library'", ensure:
+   - The Working Directory is set to the root directory of the LLM-API-Key-Proxy repository
+   - The `src/` folder exists in the working directory
+   - The `rotator_library` package is installed in editable mode:
+     ```bash
+     pip install -e src/rotator_library
+     ```
+5. **View Logs**: Check the Proxy Logs panel for error messages
+
+### OAuth Authentication Fails
+
+1. **Callback Port**: Ensure the configured port is not in use by another application
+2. **Browser Popup**: Allow the application to open browser windows for OAuth login
+3. **PYTHONPATH**: Ensure the Working Directory is set correctly (see above)
+4. **Python Dependencies**: Verify all required packages are installed, including:
+   - `httpx` - For OAuth HTTP requests
+   - `google-auth-oauthlib` - For Google OAuth providers
+   - Check `requirements.txt` for complete dependency list
 
 ### Application Won't Launch
 
