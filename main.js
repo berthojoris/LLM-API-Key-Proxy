@@ -363,11 +363,13 @@ try:
             if existing_files:
                 nums = []
                 for f in existing_files:
-                    match = __import__('re').search(r'_oauth_(\\\\d+)\\\\.json$', f.name)
+                    match = __import__('re').search(r'_oauth_(\\d+)\\.json$', f.name)
                     if match:
                         nums.append(int(match.group(1)))
                 if nums:
                     next_num = max(nums) + 1
+            
+            print(f"Found {len(existing_files)} existing credentials, next number: {next_num}", flush=True)
             
             cred_file_path = oauth_base_dir / f"${providerId}_oauth_{next_num}.json"
             
