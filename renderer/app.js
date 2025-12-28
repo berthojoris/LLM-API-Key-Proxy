@@ -407,4 +407,105 @@ refreshOAuthBtn.addEventListener('click', () => {
   loadOAuthProviders()
 })
 
+// Listen for email prompt request after OAuth success
+window.electronAPI.onRequestOAuthEmail(async (data) => {
+  console.log('📧 Email prompt requested for:', data.providerName)
+
+  const modal = document.getElementById('email-modal')
+  const modalTitle = document.getElementById('modal-title')
+  const modalMessage = document.getElementById('modal-message')
+  const emailInput = document.getElementById('email-input')
+  const submitBtn = document.getElementById('email-submit-btn')
+
+  // Extract credential number from path if available
+  const credMatch = data.credentialPath.match(/_oauth_(\d+)\.json$/)
+  const credNum = credMatch ? credMatch[1] : '1'
+
+  // Set modal content with credential info
+  modalTitle.textContent = `${data.providerName} Authentication Successful!`
+  modalMessage.innerHTML = `
+    <strong>Credential #${credNum} created successfully!</strong><br><br>
+    Please enter your email or account identifier to label this credential.<br>
+    This will help you identify which account this credential belongs to.
+  `
+  emailInput.value = ''
+  emailInput.placeholder = 'your.email@example.com'
+
+  // Show modal
+  modal.style.display = 'flex'
+  emailInput.focus()
+
+  // Add log to UI
+  addLog('info', `🎉 ${data.providerName} authentication completed! Please enter your email to label the credential.`)
+
+  // Handle email submission
+  const handleSubmit = async () => {
+    const email = emailInput.value.trim()
+
+    if (!email) {
+      emailInput.style.borderColor = 'var(--danger-color)'
+      emailInput.placeholder = 'Email is required!'
+      addLog('error', '❌ Email is required to save credential')
+      return
+    }
+
+    // Basic email validation
+    if (!email.includes('@') && !email.includes('.')) {
+      emailInput.style.borderColor = 'var(--danger-color)'
+      emailInput.placeholder = 'Please enter a valid email or identifier'
+      addLog('error', '❌ Please enter a valid email address')
+      return
+    }
+
+    console.log('✅ User provided email:', email)
+    addLog('info', `💾 Saving credential with email: ${email}...`)
+
+    // Disable button during processing
+    submitBtn.disabled = true
+    submitBtn.textContent = 'Saving...'
+
+    try {
+      const result = await window.electronAPI.updateOAuthEmail(data.credentialPath, email)
+
+      if (result.success) {
+        addLog('info', `✅ Credential labeled successfully with email: ${email}`)
+
+        // Hide modal
+        modal.style.display = 'none'
+        emailInput.value = ''
+        emailInput.style.borderColor = ''
+
+        // Reload OAuth providers to show updated email
+        await loadOAuthProviders()
+
+        addLog('info', `🔄 Credential list refreshed - ${email} is now visible`)
+      } else {
+        addLog('error', `❌ Failed to update credential: ${result.error}`)
+        alert(`Failed to save email: ${result.error}`)
+      }
+    } catch (err) {
+      addLog('error', `❌ Error updating credential: ${err.message}`)
+      alert(`Error: ${err.message}`)
+    } finally {
+      submitBtn.disabled = false
+      submitBtn.textContent = 'Save'
+    }
+  }
+
+  // Submit on button click
+  submitBtn.onclick = handleSubmit
+
+  // Submit on Enter key
+  emailInput.onkeypress = (e) => {
+    if (e.key === 'Enter') {
+      handleSubmit()
+    }
+  }
+
+  // Reset border color on input
+  emailInput.oninput = () => {
+    emailInput.style.borderColor = ''
+  }
+})
+
 loadOAuthProviders()

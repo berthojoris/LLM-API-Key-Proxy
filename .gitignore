@@ -108,3 +108,4 @@ coverage/
 .factory/
 .roo/
 NOTE.txt
+oauth_creds/

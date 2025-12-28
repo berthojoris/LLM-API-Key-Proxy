@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('oauth-status', subscription)
     return () => ipcRenderer.removeListener('oauth-status', subscription)
   },
+  onRequestOAuthEmail: (callback) => {
+    const subscription = (_event, data) => callback(data)
+    ipcRenderer.on('request-oauth-email', subscription)
+    return () => ipcRenderer.removeListener('request-oauth-email', subscription)
+  },
+  updateOAuthEmail: (credentialPath, email) => ipcRenderer.invoke('update-oauth-email', credentialPath, email),
   openPathInExplorer: (filePath) => ipcRenderer.invoke('open-path-in-explorer', filePath),
   browseForFile: (options) => ipcRenderer.invoke('browse-for-file', options),
   browseForDirectory: (options) => ipcRenderer.invoke('browse-for-directory', options)

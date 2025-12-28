@@ -637,6 +637,29 @@ except Exception as e:
           console.log('✅ OAuth authentication completed successfully')
           // Wait a moment for the file to be written completely
           await new Promise(resolve => setTimeout(resolve, 1000))
+
+          // Get the newly created credential  
+          const initialCreds = await getOAuthCredentials()
+          const providerCreds = initialCreds[providerId] || []
+          const provider = OAUTH_PROVIDERS[providerId]
+
+          // Find the most recent credential (last in array)
+          if (providerCreds.length > 0) {
+            const newCred = providerCreds[providerCreds.length - 1]
+            const credFilePath = path.join(workingDir, 'oauth_creds', newCred.id)
+
+            console.log('📧 Requesting email for credential:', newCred.id)
+
+            // Request email from user via renderer
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('request-oauth-email', {
+                provider: providerId,
+                providerName: provider.name,
+                credentialPath: credFilePath
+              })
+            }
+          }
+
           const creds = await getOAuthCredentials()
 
           if (mainWindow && !mainWindow.isDestroyed()) {
@@ -743,6 +766,24 @@ async function deleteOAuthCredential(providerId, credentialId) {
   }
 }
 
+async function updateOAuthCredentialEmail(credentialPath, email) {
+  try {
+    const credData = JSON.parse(await fs.readFile(credentialPath, 'utf-8'))
+    if (!credData._proxy_metadata) {
+      credData._proxy_metadata = {}
+    }
+    credData._proxy_metadata.email = email.trim()
+    credData._proxy_metadata.last_check_timestamp = Date.now() / 1000
+
+    await fs.writeFile(credentialPath, JSON.stringify(credData, null, 2))
+    console.log('✅ Updated credential with email:', email.trim())
+    return { success: true }
+  } catch (error) {
+    console.error('Failed to update credential with email:', error)
+    return { success: false, error: error.message }
+  }
+}
+
 app.whenReady().then(() => {
   ipcMain.handle('start-proxy', async () => {
     startProxy()
@@ -800,6 +841,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('delete-oauth-credential', async (event, providerId, credentialId) => {
     return await deleteOAuthCredential(providerId, credentialId)
+  })
+
+  ipcMain.handle('update-oauth-email', async (event, credentialPath, email) => {
+    return await updateOAuthCredentialEmail(credentialPath, email)
   })
 
   ipcMain.handle('open-path-in-explorer', async (event, filePath) => {

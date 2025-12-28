@@ -150,6 +150,19 @@
     </main>
   </div>
 
+  <!-- Email Input Modal -->
+  <div id="email-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <h3 id="modal-title">Authentication Successful!</h3>
+      <p id="modal-message">Please enter your email or account identifier to label this credential:</p>
+      <input type="email" id="email-input" class="form-input" placeholder="your.email@example.com" required>
+      <div class="modal-buttons">
+        <button id="email-submit-btn" class="btn btn-primary">Save</button>
+      </div>
+      <p class="modal-note">*Email is required to label your credential</p>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
