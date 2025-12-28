@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, dialog } = require('electron')
 const path = require('path')
+const os = require('os')
 const { spawn } = require('child_process')
 const fs = require('fs').promises
 const Store = require('electron-store')
@@ -39,7 +40,7 @@ try {
     debug: true,
     watchRenderer: true
   })
-} catch (_) {}
+} catch (_) { }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -262,10 +263,34 @@ async function startOAuthAuthentication(providerId, customPort) {
     return { success: false, error: 'Unknown provider' }
   }
 
-  const workingDir = store.get('workingDir', '.')
+  let workingDir = store.get('workingDir', '.')
   const pythonPath = store.get('pythonPath', 'python')
   const port = customPort || provider.callbackPort
-  const srcDir = path.join(workingDir, 'src')
+
+  // Need to use require here to get the sync version of fs
+  const fsSync = require('fs');
+
+  // Get the current directory and check for src directory there
+  const currentDir = process.cwd();
+  const currentSrcDir = path.join(currentDir, 'src');
+  const storedSrcDir = path.join(workingDir, 'src');
+
+  let srcDir;
+
+  // Use current directory's src if it exists, otherwise use stored directory's src
+  // If neither exists, default to current directory
+  if (fsSync.existsSync(currentSrcDir)) {
+    console.log('Using src directory from current working directory')
+    workingDir = '.'
+    srcDir = currentSrcDir
+  } else if (fsSync.existsSync(storedSrcDir)) {
+    console.log('Using src directory from stored working directory')
+    srcDir = storedSrcDir
+  } else {
+    console.log('Warning: src directory not found in current or stored directory, using current directory')
+    workingDir = '.'
+    srcDir = currentSrcDir
+  }
 
   console.log('OAuth Auth Debug:')
   console.log('  Working Dir:', workingDir)
@@ -282,23 +307,255 @@ async function startOAuthAuthentication(providerId, customPort) {
   console.log('  Final PYTHONPATH:', env.PYTHONPATH)
 
   try {
-    oauthProcess = spawn(pythonPath, ['-m', 'rotator_library.credential_tool', '--oauth', providerId, '--port', port.toString()], {
+    // Create a temporary Python script to run authentication directly
+    const tempScriptPath = path.join(os.tmpdir(), `oauth_${providerId}_${Date.now()}.py`)
+    const tempScriptContent = `
+import asyncio
+import sys
+import os
+import json
+from pathlib import Path
+import webbrowser
+
+# CRITICAL: Disable automatic browser opening in Python
+# The Electron app will handle opening the browser
+os.environ['ELECTRON_OAUTH_MODE'] = '1'
+
+# Add the src directory to the Python path to ensure imports work
+sys.path.insert(0, r"${srcDir}")
+
+try:
+    from rotator_library.provider_factory import get_provider_auth_class
+    import httpx
+    import secrets
+    import hashlib
+    import base64
+    import time
+    
+    async def run_authentication():
+        try:
+            # Get the authentication class for the provider
+            auth_class = get_provider_auth_class("${providerId}")
+            auth_instance = auth_class()
+            
+            # Set the callback port for providers that support it
+            if hasattr(auth_instance, 'CALLBACK_PORT'):
+                auth_instance.CALLBACK_PORT = ${port}
+            
+            # Create the oauth_creds directory if it doesn't exist
+            oauth_base_dir = Path.cwd() / "oauth_creds"
+            oauth_base_dir.mkdir(exist_ok=True)
+            
+            # Determine appropriate file name based on provider
+            existing_files = list(oauth_base_dir.glob("${providerId}_oauth_*.json"))
+            next_num = 1
+            if existing_files:
+                nums = []
+                for f in existing_files:
+                    match = __import__('re').search(r'_oauth_(\\\\d+)\\\\.json$', f.name)
+                    if match:
+                        nums.append(int(match.group(1)))
+                if nums:
+                    next_num = max(nums) + 1
+            
+            cred_file_path = oauth_base_dir / f"${providerId}_oauth_{next_num}.json"
+            
+            print(f"Starting authentication for ${providerId}...", flush=True)
+            print(f"Callback port: ${port}", flush=True)
+            print(f"Credential file path: {cred_file_path}", flush=True)
+            
+            # For Qwen provider, manually perform the OAuth flow without browser auto-open
+            if "${providerId}" == "qwen_code":
+                # Generate code verifier and challenge for PKCE
+                code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+                code_challenge = base64.urlsafe_b64encode(
+                    hashlib.sha256(code_verifier.encode("utf-8")).digest()
+                ).decode("utf-8").rstrip("=")
+                
+                CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56"
+                SCOPE = "openid profile email model.completion"
+                TOKEN_ENDPOINT = "https://chat.qwen.ai/api/v1/oauth2/token"
+                
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                }
+                
+                async with httpx.AsyncClient() as client:
+                    # Request device code
+                    dev_response = await client.post(
+                        "https://chat.qwen.ai/api/v1/oauth2/device/code",
+                        headers=headers,
+                        data={
+                            "client_id": CLIENT_ID,
+                            "scope": SCOPE,
+                            "code_challenge": code_challenge,
+                            "code_challenge_method": "S256",
+                        },
+                    )
+                    dev_response.raise_for_status()
+                    dev_data = dev_response.json()
+                    
+                    verification_url = dev_data["verification_uri_complete"]
+                    
+                    # Output URL for Electron to capture and open
+                    print(f"OAUTH_URL:{verification_url}", flush=True)
+                    print(f"Please authenticate in the browser that just opened...", flush=True)
+                    
+                    # Poll for token
+                    token_data = None
+                    start_time = time.time()
+                    interval = dev_data.get("interval", 5)
+                    
+                    while time.time() - start_time < dev_data["expires_in"]:
+                        await asyncio.sleep(interval)
+                        
+                        poll_response = await client.post(
+                            TOKEN_ENDPOINT,
+                            headers=headers,
+                            data={
+                                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                                "device_code": dev_data["device_code"],
+                                "client_id": CLIENT_ID,
+                                "code_verifier": code_verifier,
+                            },
+                        )
+                        
+                        if poll_response.status_code == 200:
+                            token_data = poll_response.json()
+                            print("Token received successfully!", flush=True)
+                            break
+                        elif poll_response.status_code == 400:
+                            poll_data = poll_response.json()
+                            error_type = poll_data.get("error")
+                            if error_type == "authorization_pending":
+                                print(f"Waiting for authorization... ({int(time.time() - start_time)}s elapsed)", flush=True)
+                            elif error_type == "slow_down":
+                                interval = int(interval * 1.5)
+                                if interval > 10:
+                                    interval = 10
+                            else:
+                                raise ValueError(f"Token polling failed: {poll_data.get('error_description', error_type)}")
+                        else:
+                            poll_response.raise_for_status()
+                    
+                    if not token_data:
+                        raise TimeoutError("OAuth device flow timed out. Please try again.")
+                    
+                    # Save credentials
+                    creds = {
+                        "access_token": token_data["access_token"],
+                        "refresh_token": token_data.get("refresh_token"),
+                        "expiry_date": (time.time() + token_data["expires_in"]) * 1000,
+                        "resource_url": token_data.get("resource_url", "https://portal.qwen.ai/v1"),
+                        "_proxy_metadata": {
+                            "provider_name": "${providerId}",
+                            "display_name": "Qwen Code",
+                            "email": "user@example.com",
+                            "last_check_timestamp": time.time(),
+                        }
+                    }
+                    
+                    with open(str(cred_file_path), 'w') as f:
+                        json.dump(creds, f, indent=2)
+                    
+                    print(f"Authentication successful for ${providerId}!", flush=True)
+                    print("AUTHENTICATION_SUCCESS", flush=True)
+            else:
+                # For other providers, use the standard initialize_token flow
+                temp_creds = {
+                    "_proxy_metadata": {
+                        "provider_name": "${providerId}",
+                        "display_name": "${providerId.replace('_', ' ').title()}"
+                    }
+                }
+                
+                # Call initialize_token - it should handle URL output
+                initialized_creds = await auth_instance.initialize_token(temp_creds)
+                
+                # Save the initialized credentials
+                with open(str(cred_file_path), 'w') as f:
+                    json.dump(initialized_creds, f, indent=2)
+                
+                print(f"Authentication successful for ${providerId}!", flush=True)
+                print("AUTHENTICATION_SUCCESS", flush=True)
+                
+                # Print user info for confirmation
+                user_info = await auth_instance.get_user_info(initialized_creds)
+                email = user_info.get("email", "unknown")
+                print(f"User: {email}", flush=True)
+            
+        except Exception as e:
+            print(f"Authentication failed: {str(e)}", file=sys.stderr, flush=True)
+            print("AUTHENTICATION_FAILED", file=sys.stderr, flush=True)
+            import traceback
+            traceback.print_exc()
+            sys.exit(1)
+    
+    # Run the authentication
+    asyncio.run(run_authentication())
+    
+except ImportError as e:
+    print(f"Failed to import authentication modules: {e}", file=sys.stderr, flush=True)
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+except Exception as e:
+    print(f"Unexpected error during authentication: {e}", file=sys.stderr, flush=True)
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+`
+
+    // Write the temporary script
+    const fs = require('fs').promises;
+    await fs.writeFile(tempScriptPath, tempScriptContent)
+
+    // Spawn the Python process to run the temporary script
+    oauthProcess = spawn(pythonPath, [tempScriptPath], {
       cwd: workingDir,
       shell: true,
       env
     })
 
-    let authUrl = null
     let completed = false
     let stderrOutput = ''
+    let stdoutOutput = ''
+
+    // Send initial status to UI
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('oauth-status', {
+        type: 'starting',
+        provider: providerId,
+        message: `Starting OAuth flow for ${providerId}...`
+      })
+    }
 
     oauthProcess.stdout.on('data', (data) => {
       const output = data.toString()
+      stdoutOutput += output
       console.log('OAuth stdout:', output)
 
-      const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
-      if (urlMatch && !authUrl) {
-        authUrl = urlMatch[0]
+      // Send stdout to UI for visibility
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('oauth-status', {
+          type: 'log',
+          provider: providerId,
+          message: output.trim()
+        })
+      }
+
+      // Check for authentication success
+      if (output.includes('AUTHENTICATION_SUCCESS')) {
+        completed = true
+      }
+
+      // Check for OAUTH_URL: prefix (new format for better parsing)
+      const oauthUrlMatch = output.match(/OAUTH_URL:(https?:\/\/[^\s\n]+)/i)
+      if (oauthUrlMatch) {
+        const authUrl = oauthUrlMatch[1]
+        console.log('Opening OAuth URL:', authUrl)
         shell.openExternal(authUrl)
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('oauth-status', {
@@ -307,45 +564,94 @@ async function startOAuthAuthentication(providerId, customPort) {
             url: authUrl
           })
         }
-      }
-
-      if (output.toLowerCase().includes('success') || output.toLowerCase().includes('authenticated')) {
-        completed = true
+      } else {
+        // Fallback: Check for URL without prefix
+        const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
+        if (urlMatch) {
+          const authUrl = urlMatch[0]
+          console.log('Opening URL (fallback):', authUrl)
+          shell.openExternal(authUrl)
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('oauth-status', {
+              type: 'browser_opened',
+              provider: providerId,
+              url: authUrl
+            })
+          }
+        }
       }
     })
 
     oauthProcess.stderr.on('data', (data) => {
       const output = data.toString()
       stderrOutput += output
-      console.log('OAuth stderr:', output)
+      console.error('OAuth stderr:', output)
 
-      const urlMatch = output.match(/https?:\/\/[^\s\n]+/i)
-      if (urlMatch && !authUrl) {
-        authUrl = urlMatch[0]
-        shell.openExternal(authUrl)
+      // Send errors to UI
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('oauth-status', {
+          type: 'error',
+          provider: providerId,
+          message: output.trim()
+        })
       }
 
-      if (output.toLowerCase().includes('success') || output.toLowerCase().includes('authenticated')) {
+      // Check for authentication success in stderr as well
+      if (output.includes('AUTHENTICATION_SUCCESS')) {
         completed = true
       }
     })
 
     return new Promise((resolve) => {
-      oauthProcess.on('close', (code) => {
+      oauthProcess.on('close', async (code) => {
         oauthProcess = null
 
-        if (completed || code === 0) {
-          getOAuthCredentials().then(creds => {
-            resolve({ success: true, credentials: creds })
-          })
+        // Clean up the temporary script
+        try {
+          await fs.unlink(tempScriptPath)
+        } catch (cleanupErr) {
+          console.error('Failed to clean up temporary script:', cleanupErr)
+        }
+
+        if (completed || stderrOutput.includes('AUTHENTICATION_SUCCESS')) {
+          console.log('✅ OAuth authentication completed successfully')
+          // Wait a moment for the file to be written completely
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          const creds = await getOAuthCredentials()
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('oauth-status', {
+              type: 'success',
+              provider: providerId,
+              message: 'Authentication completed successfully!'
+            })
+          }
+
+          resolve({ success: true, credentials: creds })
         } else {
-          const errorMsg = stderrOutput.trim() || `Authentication failed with code ${code}`
+          console.error('❌ OAuth authentication failed')
+          console.error('Exit code:', code)
+          console.error('Stderr output:', stderrOutput)
+          console.error('Stdout output:', stdoutOutput)
+
+          const errorMsg = stderrOutput.trim() || stdoutOutput.trim() || `Authentication failed with exit code ${code}`
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('oauth-status', {
+              type: 'failed',
+              provider: providerId,
+              message: `Authentication failed: ${errorMsg.substring(0, 200)}`
+            })
+          }
+
           resolve({ success: false, error: errorMsg })
         }
       })
 
       oauthProcess.on('error', (error) => {
         oauthProcess = null
+        // Clean up the temporary script
+        fs.unlink(tempScriptPath).catch(err => console.error('Failed to clean up temporary script:', err))
         resolve({ success: false, error: error.message })
       })
     })

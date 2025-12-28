@@ -109,7 +109,7 @@ document.getElementById('browse-python-btn').addEventListener('click', async () 
         { name: 'All Files', extensions: ['*'] }
       ]
     })
-    
+
     if (result.success && result.filePath) {
       pythonPathInput.value = result.filePath
       addLog('info', `Selected Python: ${result.filePath}`)
@@ -124,7 +124,7 @@ document.getElementById('browse-working-dir-btn').addEventListener('click', asyn
     const result = await window.electronAPI.browseForDirectory({
       title: 'Select Working Directory'
     })
-    
+
     if (result.success && result.filePath) {
       workingDirInput.value = result.filePath
       addLog('info', `Selected Working Directory: ${result.filePath}`)
@@ -143,7 +143,7 @@ document.getElementById('browse-proxy-script-btn').addEventListener('click', asy
         { name: 'All Files', extensions: ['*'] }
       ]
     })
-    
+
     if (result.success && result.filePath) {
       proxyScriptInput.value = result.filePath
       addLog('info', `Selected Proxy Script: ${result.filePath}`)
@@ -189,7 +189,7 @@ const oauthProvidersContainer = document.getElementById('oauth-providers-contain
 async function loadOAuthProviders() {
   try {
     oauthProvidersContainer.innerHTML = '<div class="loading-spinner">Loading OAuth providers...</div>'
-    
+
     const providers = await window.electronAPI.getOAuthProviders()
     const credentials = await window.electronAPI.getOAuthCredentials()
 
@@ -277,7 +277,7 @@ function setupOAuthEventListeners() {
       try {
         addLog('info', `Starting OAuth authentication for ${providerId}...`)
         const result = await window.electronAPI.startOAuthAuth(providerId)
-        
+
         if (result.success) {
           addLog('info', `Authentication completed for ${providerId}`)
           await loadOAuthProviders()
@@ -311,7 +311,7 @@ function setupOAuthEventListeners() {
 
       try {
         const result = await window.electronAPI.exportOAuthEnv(providerId, credentialId)
-        
+
         if (result.success) {
           navigator.clipboard.writeText(result.content)
           addLog('info', `Exported ${providerId} credential to clipboard`)
@@ -336,7 +336,7 @@ function setupOAuthEventListeners() {
 
       try {
         const result = await window.electronAPI.deleteOAuthCredential(providerId, credentialId)
-        
+
         if (result.success) {
           addLog('info', `Deleted credential ${credentialId}`)
           await loadOAuthProviders()
@@ -353,9 +353,9 @@ function setupOAuthEventListeners() {
     btn.addEventListener('click', () => {
       const providerId = btn.dataset.provider
       const currentPort = parseInt(btn.textContent.match(/\d+/)[0])
-      
+
       const newPort = prompt(`Enter OAuth callback port for ${providerId}:`, currentPort)
-      
+
       if (newPort && !isNaN(newPort)) {
         const portNum = parseInt(newPort)
         if (portNum > 0 && portNum < 65536) {
@@ -370,8 +370,28 @@ function setupOAuthEventListeners() {
 }
 
 window.electronAPI.onOAuthStatus((data) => {
-  if (data.type === 'browser_opened') {
-    addLog('info', `Browser opened for ${data.provider} authentication`)
+  switch (data.type) {
+    case 'starting':
+      addLog('info', `🔄 ${data.message}`)
+      break
+    case 'log':
+      addLog('info', data.message)
+      break
+    case 'error':
+      addLog('error', `❌ ${data.message}`)
+      break
+    case 'success':
+      addLog('info', `✅ ${data.message}`)
+      break
+    case 'failed':
+      addLog('error', `❌ ${data.message}`)
+      break
+    case 'browser_opened':
+      addLog('info', `🌐 Browser opened for ${data.provider} authentication`)
+      addLog('info', `URL: ${data.url}`)
+      break
+    default:
+      addLog('info', JSON.stringify(data))
   }
 })
 
