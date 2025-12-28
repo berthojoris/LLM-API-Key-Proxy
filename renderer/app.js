@@ -214,7 +214,7 @@ async function loadOAuthProviders() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
-              Authenticate
+              🔧 Start Auth [NEW]
             </button>
             <button class="btn btn-secondary btn-small config-port-btn" data-provider="${providerId}">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -270,13 +270,20 @@ function setupOAuthEventListeners() {
 
   authButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
+      console.log('🔵 AUTHENTICATE BUTTON CLICKED!')
+
       const providerId = btn.dataset.provider
+      console.log('Provider ID:', providerId)
+
       btn.disabled = true
       btn.innerHTML = '<span class="spinner-small"></span> Authenticating...'
 
       try {
+        console.log('📞 Calling startOAuthAuth...')
         addLog('info', `Starting OAuth authentication for ${providerId}...`)
+
         const result = await window.electronAPI.startOAuthAuth(providerId)
+        console.log('📥 Received result:', result)
 
         if (result.success) {
           addLog('info', `Authentication completed for ${providerId}`)
@@ -288,17 +295,18 @@ function setupOAuthEventListeners() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
             </svg>
-            Authenticate
+            🔧 Start Auth [NEW]
           `
         }
       } catch (error) {
+        console.error('❌ ERROR in authenticate handler:', error)
         addLog('error', `Authentication error: ${error.message}`)
         btn.disabled = false
         btn.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
           </svg>
-          Authenticate
+          🔧 Start Auth [NEW]
         `
       }
     })

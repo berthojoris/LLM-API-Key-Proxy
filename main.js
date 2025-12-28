@@ -60,6 +60,9 @@ function createWindow() {
 
   mainWindow.loadFile('renderer/index.html')
 
+  // Open DevTools automatically for debugging
+  mainWindow.webContents.openDevTools()
+
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
   })
@@ -307,6 +310,14 @@ async function startOAuthAuthentication(providerId, customPort) {
   console.log('  Final PYTHONPATH:', env.PYTHONPATH)
 
   try {
+    // Create display name from provider ID (convert to title case)
+    const displayName = providerId
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+
+    console.log('Display name:', displayName)
+
     // Create a temporary Python script to run authentication directly
     const tempScriptPath = path.join(os.tmpdir(), `oauth_${providerId}_${Date.now()}.py`)
     const tempScriptContent = `
@@ -467,7 +478,7 @@ try:
                 temp_creds = {
                     "_proxy_metadata": {
                         "provider_name": "${providerId}",
-                        "display_name": "${providerId.replace('_', ' ').title()}"
+                        "display_name": "${displayName}"
                     }
                 }
                 
@@ -511,13 +522,22 @@ except Exception as e:
     // Write the temporary script
     const fs = require('fs').promises;
     await fs.writeFile(tempScriptPath, tempScriptContent)
+    console.log('✅ Temporary OAuth script created at:', tempScriptPath)
+    console.log('📝 Script size:', tempScriptContent.length, 'bytes')
 
     // Spawn the Python process to run the temporary script
+    console.log('🐍 Spawning Python process...')
+    console.log('   Command:', pythonPath)
+    console.log('   Script:', tempScriptPath)
+    console.log('   Working Dir:', workingDir)
+
     oauthProcess = spawn(pythonPath, [tempScriptPath], {
       cwd: workingDir,
       shell: true,
       env
     })
+
+    console.log('✅ Python process spawned with PID:', oauthProcess.pid)
 
     let completed = false
     let stderrOutput = ''
@@ -649,7 +669,20 @@ except Exception as e:
       })
 
       oauthProcess.on('error', (error) => {
+        console.error('❌ Python process error:', error)
+        console.error('   Error code:', error.code)
+        console.error('   Error message:', error.message)
+
         oauthProcess = null
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('oauth-status', {
+            type: 'failed',
+            provider: providerId,
+            message: `Failed to start Python process: ${error.message}`
+          })
+        }
+
         // Clean up the temporary script
         fs.unlink(tempScriptPath).catch(err => console.error('Failed to clean up temporary script:', err))
         resolve({ success: false, error: error.message })
