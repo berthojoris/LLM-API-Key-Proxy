@@ -275,8 +275,50 @@ function setupOAuthEventListeners() {
       const providerId = btn.dataset.provider
       console.log('Provider ID:', providerId)
 
+      // Store original HTML for restoration
+      const originalHTML = btn.innerHTML
       btn.disabled = true
-      btn.innerHTML = '<span class="spinner-small"></span> Authenticating...'
+      btn.dataset.authenticating = 'true'
+
+      // Replace button with cancel button
+      btn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+        Cancel Authentication
+      `
+      btn.classList.remove('btn-primary')
+      btn.classList.add('btn-danger')
+      btn.disabled = false
+
+      // Flag to track if user clicked cancel
+      let userCancelled = false
+
+      const cancelHandler = async () => {
+        console.log('🚫 User clicked cancel button')
+        userCancelled = true
+        btn.disabled = true
+        btn.innerHTML = '<span class="spinner-small"></span> Cancelling...'
+
+        try {
+          const cancelResult = await window.electronAPI.cancelOAuthAuth()
+          if (cancelResult.success) {
+            addLog('info', '🚫 Authentication cancelled')
+          }
+        } catch (error) {
+          console.error('Error cancelling:', error)
+        }
+
+        // Restore button state
+        btn.classList.remove('btn-danger')
+        btn.classList.add('btn-primary')
+        btn.innerHTML = originalHTML
+        btn.disabled = false
+        btn.dataset.authenticating = 'false'
+      }
+
+      // Attach cancel handler
+      btn.onclick = cancelHandler
 
       try {
         console.log('📞 Calling startOAuthAuth...')
@@ -285,29 +327,38 @@ function setupOAuthEventListeners() {
         const result = await window.electronAPI.startOAuthAuth(providerId)
         console.log('📥 Received result:', result)
 
+        // If user cancelled, don't process results
+        if (userCancelled) {
+          return
+        }
+
         if (result.success) {
           addLog('info', `Authentication completed for ${providerId}`)
           await loadOAuthProviders()
+        } else if (result.cancelled) {
+          addLog('info', `🚫 Authentication cancelled for ${providerId}`)
         } else {
           addLog('error', `Authentication failed for ${providerId}: ${result.error}`)
-          btn.disabled = false
-          btn.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-            </svg>
-            🔧 Start Auth [NEW]
-          `
         }
+
+        // Restore button to original state
+        btn.classList.remove('btn-danger')
+        btn.classList.add('btn-primary')
+        btn.innerHTML = originalHTML
+        btn.disabled = false
+        btn.dataset.authenticating = 'false'
+        btn.onclick = null
       } catch (error) {
         console.error('❌ ERROR in authenticate handler:', error)
         addLog('error', `Authentication error: ${error.message}`)
+
+        // Restore button to original state
+        btn.classList.remove('btn-danger')
+        btn.classList.add('btn-primary')
+        btn.innerHTML = originalHTML
         btn.disabled = false
-        btn.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-          </svg>
-          🔧 Start Auth [NEW]
-        `
+        btn.dataset.authenticating = 'false'
+        btn.onclick = null
       }
     })
   })
@@ -394,6 +445,9 @@ window.electronAPI.onOAuthStatus((data) => {
     case 'failed':
       addLog('error', `❌ ${data.message}`)
       break
+    case 'cancelled':
+      addLog('info', `🚫 ${data.message}`)
+      break
     case 'browser_opened':
       addLog('info', `🌐 Browser opened for ${data.provider} authentication`)
       addLog('info', `URL: ${data.url}`)
@@ -416,6 +470,7 @@ window.electronAPI.onRequestOAuthEmail(async (data) => {
   const modalMessage = document.getElementById('modal-message')
   const emailInput = document.getElementById('email-input')
   const submitBtn = document.getElementById('email-submit-btn')
+  const cancelBtn = document.getElementById('email-cancel-btn')
 
   // Extract credential number from path if available
   const credMatch = data.credentialPath.match(/_oauth_(\d+)\.json$/)
@@ -437,6 +492,20 @@ window.electronAPI.onRequestOAuthEmail(async (data) => {
 
   // Add log to UI
   addLog('info', `🎉 ${data.providerName} authentication completed! Please enter your email to label the credential.`)
+
+  // Handle cancel button
+  const handleCancel = async () => {
+    console.log('🚫 User cancelled email input')
+    addLog('info', '🚫 Credential email input cancelled - credential saved without email label')
+
+    // Hide modal
+    modal.style.display = 'none'
+    emailInput.value = ''
+    emailInput.style.borderColor = ''
+
+    // Reload to show the credential (with default email)
+    await loadOAuthProviders()
+  }
 
   // Handle email submission
   const handleSubmit = async () => {
@@ -460,8 +529,9 @@ window.electronAPI.onRequestOAuthEmail(async (data) => {
     console.log('✅ User provided email:', email)
     addLog('info', `💾 Saving credential with email: ${email}...`)
 
-    // Disable button during processing
+    // Disable buttons during processing
     submitBtn.disabled = true
+    cancelBtn.disabled = true
     submitBtn.textContent = 'Saving...'
 
     try {
@@ -488,6 +558,7 @@ window.electronAPI.onRequestOAuthEmail(async (data) => {
       alert(`Error: ${err.message}`)
     } finally {
       submitBtn.disabled = false
+      cancelBtn.disabled = false
       submitBtn.textContent = 'Save'
     }
   }
@@ -495,10 +566,15 @@ window.electronAPI.onRequestOAuthEmail(async (data) => {
   // Submit on button click
   submitBtn.onclick = handleSubmit
 
+  // Cancel on button click
+  cancelBtn.onclick = handleCancel
+
   // Submit on Enter key
   emailInput.onkeypress = (e) => {
     if (e.key === 'Enter') {
       handleSubmit()
+    } else if (e.key === 'Escape') {
+      handleCancel()
     }
   }
 

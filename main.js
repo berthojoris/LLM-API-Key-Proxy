@@ -11,6 +11,7 @@ let mainWindow = null
 let proxyProcess = null
 let tray = null
 let oauthProcess = null
+let oauthCancelled = false
 
 const OAUTH_PROVIDERS = {
   gemini_cli: {
@@ -265,6 +266,9 @@ async function startOAuthAuthentication(providerId, customPort) {
   if (!provider) {
     return { success: false, error: 'Unknown provider' }
   }
+
+  // Reset cancellation flag at the start of new auth
+  oauthCancelled = false
 
   let workingDir = store.get('workingDir', '.')
   const pythonPath = store.get('pythonPath', 'python')
@@ -544,6 +548,7 @@ except Exception as e:
     let completed = false
     let stderrOutput = ''
     let stdoutOutput = ''
+    let cancelled = false
 
     // Send initial status to UI
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -626,13 +631,31 @@ except Exception as e:
 
     return new Promise((resolve) => {
       oauthProcess.on('close', async (code) => {
+        cancelled = oauthCancelled
         oauthProcess = null
+        oauthCancelled = false
 
         // Clean up the temporary script
         try {
           await fs.unlink(tempScriptPath)
         } catch (cleanupErr) {
           console.error('Failed to clean up temporary script:', cleanupErr)
+        }
+
+        // Check if authentication was cancelled
+        if (cancelled) {
+          console.log('🚫 OAuth authentication cancelled by user')
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('oauth-status', {
+              type: 'cancelled',
+              provider: providerId,
+              message: 'Authentication cancelled by user'
+            })
+          }
+
+          resolve({ success: false, cancelled: true, error: 'Authentication cancelled by user' })
+          return
         }
 
         if (completed || stderrOutput.includes('AUTHENTICATION_SUCCESS')) {
@@ -847,6 +870,34 @@ app.whenReady().then(() => {
 
   ipcMain.handle('update-oauth-email', async (event, credentialPath, email) => {
     return await updateOAuthCredentialEmail(credentialPath, email)
+  })
+
+  ipcMain.handle('cancel-oauth-auth', async () => {
+    try {
+      if (oauthProcess) {
+        console.log('🚫 Cancelling OAuth authentication process...')
+        oauthCancelled = true
+
+        // Kill the Python OAuth process
+        oauthProcess.kill('SIGTERM')
+
+        // Force kill after 2 seconds if still running
+        setTimeout(() => {
+          if (oauthProcess) {
+            console.log('⚠️ Force killing OAuth process')
+            oauthProcess.kill('SIGKILL')
+            oauthProcess = null
+          }
+        }, 2000)
+
+        return { success: true, message: 'OAuth authentication cancelled' }
+      } else {
+        return { success: false, error: 'No active OAuth process to cancel' }
+      }
+    } catch (error) {
+      console.error('Error cancelling OAuth process:', error)
+      return { success: false, error: error.message }
+    }
   })
 
   ipcMain.handle('open-path-in-explorer', async (event, filePath) => {
